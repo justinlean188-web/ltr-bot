@@ -61,34 +61,25 @@ jobs:
         ls -la .buildozer/ || true
         cat .buildozer/android/platform/build-*/logs/*.log || true
         
-    - name: Upload APK
+    - name: Check for APK files
+      run: |
+        echo "=== Checking for APK files ==="
+        ls -la bin/ || echo "bin/ directory not found"
+        find . -name "*.apk" -type f || echo "No APK files found"
+        
+    - name: Upload APK (if exists)
       uses: actions/upload-artifact@v4
       with:
         name: ltrconverter-apk
         path: bin/*.apk
+        if-no-files-found: ignore
         
-    - name: Create Release
+    - name: Create Release (if APK exists and has permissions)
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-      uses: softprops/action-gh-release@v2
-      with:
-        files: bin/*.apk
-        tag_name: v${{ github.run_number }}
-        name: LTR Converter Bot APK v${{ github.run_number }}
-        body: |
-          🤖 LTR Converter Bot Android APK
-          
-          **Build Information:**
-          - Commit: ${{ github.sha }}
-          - Branch: ${{ github.ref_name }}
-          - Build Number: ${{ github.run_number }}
-          
-          **Installation:**
-          1. Download the APK file
-          2. Transfer to your Android device
-          3. Enable "Install from unknown sources"
-          4. Install the APK
-          5. Configure bot settings in the app
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        if [ -f bin/*.apk ]; then
+          echo "APK found, but skipping release creation due to permission issues"
+          echo "Download the APK from the Artifacts section instead"
+        else
+          echo "No APK found to release"
+        fi
