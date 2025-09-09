@@ -1,4 +1,4 @@
-name: Build Android APK (Robust)
+name: Build Android APK (Simple)
 
 on:
   workflow_dispatch:  # Manual trigger only
@@ -14,7 +14,7 @@ jobs:
     - name: Set up Python 3.8
       uses: actions/setup-python@v5
       with:
-        python-version: '3.8'  # Use Python 3.8 for better compatibility
+        python-version: '3.8'
         
     - name: Install system dependencies
       run: |
@@ -43,10 +43,27 @@ jobs:
       run: |
         cp buildozer.spec.simple buildozer.spec
         
-    - name: Show buildozer.spec content
+    - name: Pre-configure Android SDK licenses
       run: |
-        echo "=== buildozer.spec content ==="
-        cat buildozer.spec
+        echo "=== Pre-configuring Android SDK licenses ==="
+        
+        # Create Android SDK directory structure
+        export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+        mkdir -p $ANDROID_HOME/licenses
+        
+        # Create license files manually (these are the standard Android SDK license hashes)
+        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
+        echo "84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_HOME/licenses/android-sdk-preview-license
+        echo "d975f751698a77b662f1254ddbeed3901e976f5a" > $ANDROID_HOME/licenses/android-sdk-license
+        echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > $ANDROID_HOME/licenses/google-gdk-license
+        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" > $ANDROID_HOME/licenses/mips-android-sysimage-license
+        
+        # Create repositories.cfg
+        mkdir -p ~/.android
+        echo "### User Sources for Android SDK Manager" > ~/.android/repositories.cfg
+        echo "count=0" >> ~/.android/repositories.cfg
+        
+        echo "✅ Android SDK licenses pre-configured"
         
     - name: Initialize buildozer
       run: |
@@ -56,80 +73,16 @@ jobs:
       run: |
         buildozer android clean || true
         
-    - name: Test buildozer configuration
-      run: |
-        echo "=== Testing buildozer configuration ==="
-        buildozer android --help || true
-        buildozer android clean || true
-        
-    - name: Setup Android SDK with license acceptance
-      run: |
-        echo "=== Setting up Android SDK with license acceptance ==="
-        
-        # Create Android SDK directory
-        export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
-        export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools
-        mkdir -p $ANDROID_HOME
-        
-        # Download Android SDK command line tools
-        echo "Downloading Android SDK command line tools..."
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-        unzip -q commandlinetools-linux-11076708_latest.zip -d $ANDROID_HOME
-        
-        # Setup command line tools
-        mkdir -p $ANDROID_HOME/cmdline-tools
-        mv $ANDROID_HOME/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
-        
-        # Update PATH
-        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
-        
-        # Create repositories.cfg
-        mkdir -p ~/.android
-        echo "### User Sources for Android SDK Manager" > ~/.android/repositories.cfg
-        echo "count=0" >> ~/.android/repositories.cfg
-        
-        # Accept licenses using multiple methods
-        echo "Accepting Android SDK licenses..."
-        
-        # Method 1: Direct license acceptance
-        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || {
-          echo "Method 1 failed, trying Method 2..."
-          
-          # Method 2: Create license files manually
-          mkdir -p $ANDROID_HOME/licenses
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
-          echo "84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_HOME/licenses/android-sdk-preview-license
-          echo "d975f751698a77b662f1254ddbeed3901e976f5a" > $ANDROID_HOME/licenses/android-sdk-license
-          echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > $ANDROID_HOME/licenses/google-gdk-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" > $ANDROID_HOME/licenses/mips-android-sysimage-license
-          
-          echo "Licenses created manually"
-        }
-        
-        # Install required packages
-        echo "Installing Android SDK packages..."
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-30" "build-tools;30.0.3" || {
-          echo "SDK manager failed, trying alternative approach..."
-          # Alternative: Let buildozer handle it
-        }
-        
-    - name: Build APK with error handling
+    - name: Build APK
       run: |
         echo "=== Starting buildozer build ==="
-        set -e  # Exit on any error
         
-        # Set environment variables for Android SDK
+        # Set environment variables
         export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
         export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools
         
-        # Try to build with timeout
-        timeout 1800 buildozer android debug -v || {
-          echo "Build failed or timed out"
-          echo "=== Checking build status ==="
-          ls -la bin/ || echo "No bin directory"
-          find . -name "*.apk" -type f || echo "No APK files found"
-          exit 1
-        }
+        # Build with timeout
+        timeout 1800 buildozer android debug -v
         
     - name: Verify APK creation
       run: |
@@ -140,20 +93,9 @@ jobs:
           file bin/*.apk
         else
           echo "❌ No APK found"
-          echo "=== Checking build directories ==="
-          find . -name "*.apk" -type f || echo "No APK files anywhere"
-          ls -la .buildozer/ || echo "No .buildozer directory"
+          echo "=== Checking for APK files ==="
+          find . -name "*.apk" -type f || echo "No APK files found"
         fi
-        
-    - name: Show build logs on failure
-      if: failure()
-      run: |
-        echo "=== Build failed, showing detailed logs ==="
-        find .buildozer -name "*.log" -exec echo "=== {} ===" \; -exec cat {} \; || true
-        echo "=== Buildozer directory contents ==="
-        ls -la .buildozer/ || true
-        echo "=== Bin directory contents ==="
-        ls -la bin/ || true
         
     - name: Upload APK (if exists)
       uses: actions/upload-artifact@v4
