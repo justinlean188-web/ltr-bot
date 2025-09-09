@@ -62,29 +62,55 @@ jobs:
         buildozer android --help || true
         buildozer android clean || true
         
-    - name: Accept Android SDK licenses
+    - name: Setup Android SDK with license acceptance
       run: |
-        echo "=== Accepting Android SDK licenses ==="
+        echo "=== Setting up Android SDK with license acceptance ==="
+        
+        # Create Android SDK directory
+        export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+        export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools
+        mkdir -p $ANDROID_HOME
+        
+        # Download Android SDK command line tools
+        echo "Downloading Android SDK command line tools..."
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+        unzip -q commandlinetools-linux-11076708_latest.zip -d $ANDROID_HOME
+        
+        # Setup command line tools
+        mkdir -p $ANDROID_HOME/cmdline-tools
+        mv $ANDROID_HOME/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+        
+        # Update PATH
+        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+        
+        # Create repositories.cfg
         mkdir -p ~/.android
         echo "### User Sources for Android SDK Manager" > ~/.android/repositories.cfg
         echo "count=0" >> ~/.android/repositories.cfg
         
-        # Accept licenses automatically
-        yes | sdkmanager --licenses || {
-          echo "=== Setting up Android SDK manually ==="
-          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
-          export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools
+        # Accept licenses using multiple methods
+        echo "Accepting Android SDK licenses..."
+        
+        # Method 1: Direct license acceptance
+        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || {
+          echo "Method 1 failed, trying Method 2..."
           
-          # Create SDK directory
-          mkdir -p $ANDROID_HOME
+          # Method 2: Create license files manually
+          mkdir -p $ANDROID_HOME/licenses
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_HOME/licenses/android-sdk-preview-license
+          echo "d975f751698a77b662f1254ddbeed3901e976f5a" > $ANDROID_HOME/licenses/android-sdk-license
+          echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > $ANDROID_HOME/licenses/google-gdk-license
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" > $ANDROID_HOME/licenses/mips-android-sysimage-license
           
-          # Download and setup SDK tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q commandlinetools-linux-11076708_latest.zip -d $ANDROID_HOME
-          mv $ANDROID_HOME/cmdline-tools $ANDROID_HOME/tools
-          
-          # Accept licenses
-          yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses || true
+          echo "Licenses created manually"
+        }
+        
+        # Install required packages
+        echo "Installing Android SDK packages..."
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-30" "build-tools;30.0.3" || {
+          echo "SDK manager failed, trying alternative approach..."
+          # Alternative: Let buildozer handle it
         }
         
     - name: Build APK with error handling
