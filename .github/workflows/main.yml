@@ -23,7 +23,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-8-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
+        sudo apt-get install -y git zip unzip openjdk-8-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev build-essential
         
     - name: Install Python dependencies
       run: |
@@ -45,9 +45,21 @@ jobs:
         echo "=== buildozer.spec content ==="
         cat buildozer.spec
         
+    - name: Clean previous builds
+      run: |
+        buildozer android clean || true
+        
     - name: Build APK with verbose output
       run: |
         buildozer android debug -v
+      continue-on-error: true
+      
+    - name: Show build logs on failure
+      if: failure()
+      run: |
+        echo "=== Build failed, showing logs ==="
+        ls -la .buildozer/ || true
+        cat .buildozer/android/platform/build-*/logs/*.log || true
         
     - name: Upload APK
       uses: actions/upload-artifact@v4
